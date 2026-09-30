@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel= "stylesheet" type= "text/css" href= "{{ url_for('static',filename='user_style.css') }}">
+<title>IPI Demo — Assistente Aziendale (Vittima)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
+
+</head>
+<body>
+
+<div id="victim-panel">
+  <div class="victim-header">
+    <div class="logo">🏢</div>
+    <div class="title-block">
+      <h1>AziendaDemo s.r.l. — Assistente AI</h1>
+      <div class="subtitle">Powered by Gemini</div>
+    </div>
+  </div>
+
+  <div class="user-strip">
+    <div class="user-avatar">{{ utente.nome[0] }}</div>
+    <div class="user-info">
+      <div class="name">{{ utente.nome }}</div>
+      <div class="meta">{{ utente.email }} &nbsp;·&nbsp; {{ utente.ruolo }} — {{ utente.reparto }}</div>
+    </div>
+    <div class="user-badge">{{ utente.codice_cliente }}</div>
+  </div>
+
+  <div class="context-info">
+    <span class="ci-label">⚠️ Dati nel contesto:</span>
+    <div class="context-fields">
+      <span class="cf">{{ utente.nome }}</span>
+      <span class="cf">{{ utente.email }}</span>
+      <span class="cf">{{ utente.ruolo }}</span>
+      <span class="cf">{{ utente.codice_cliente }}</span>
+    </div>
+  </div>
+
+  <div class="chat-area" id="chat-area">
+    <div class="placeholder-msg" id="placeholder">
+      <div class="icon">📄</div>
+      <p>Inserisci l'URL di una pagina web<br>per ottenere un riassunto.</p>
+    </div>
+  </div>
+
+  <div class="input-row">
+    <input class="url-input" id="url-input" type="text"
+      placeholder="http://localhost:9000/poc"
+      value="http://localhost:9000/poc">
+    <label><input type="checkbox" id="secure"> Attiva sicurezza</label>
+    <select class="security_level" id="security-level" style="visibility: hidden;" multiple disabled>
+      <optgroup label="Livelli di sicurezza (demo)">
+        <option value="remove_hidden" selected>Rimuovi testo nascosto</option>
+        <option value="sanitize" selected>Sanitizza</option>
+        <option value="prompt_strengthening" selected>Prompt strengthening</option>
+      </optgroup>
+    </select>
+    <button class="analyze-btn" id="analyze-btn" onclick="analyze()">Analizza</button>
+  </div>
+</div>
+
+<script>
+marked.setOptions({ breaks: true, gfm: true });
+
+function addMessage(html, type) {
+  const placeholder = document.getElementById('placeholder');
+  if (placeholder) placeholder.remove();
+
+  const chat = document.getElementById('chat-area');
+  const div  = document.createElement('div');
+  div.className = 'msg msg-' + type;
+  div.innerHTML  = html;
+  chat.appendChild(div);
+  chat.scrollTop = chat.scrollHeight;
+  return div;
+}
+
+function showLoading() {
+  const chat = document.getElementById('chat-area');
+  const placeholder = document.getElementById('placeholder');
+  if (placeholder) placeholder.remove();
+
+  const div = document.createElement('div');
+  div.id = 'loading-bubble';
+  div.className = 'msg msg-assistant';
+  div.innerHTML = '<div class="loading-dots"><span></span><span></span><span></span></div>';
+  chat.appendChild(div);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+function removeLoading() {
+  const el = document.getElementById('loading-bubble');
+  if (el) el.remove();
+}
+
+async function analyze() {
+  const urlInput = document.getElementById('url-input');
+  const btn      = document.getElementById('analyze-btn');
+  const url      = urlInput.value.trim();
+  letsecurity = [];
+  if (document.getElementById('secure').checked) {
+    const selectedOptions = Array.from(document.getElementById('security-level').selectedOptions);
+    security = selectedOptions.map(opt => opt.value);
+  } else {
+    security = [];
+  }
+  if (!url) { urlInput.focus(); return; }
+  btn.disabled = true;
+  btn.textContent = 'Analisi in corso…';
+  addMessage(`Riassumi la pagina: <br><code style="font-size:.78em">${url}</code>`, 'user');
+  showLoading();
+
+  try {
+    const res  = await fetch('/api/summarize', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ url , security }),
+    });
+    const data = await res.json();
+    removeLoading();
+
+    if (data.error) {
+      addMessage(`<div class="err-msg">⚠️ ${data.error}</div>`, 'assistant');
+    } else {
+      const rendered = marked.parse(data.markdown);
+      addMessage(rendered, 'assistant');
+    }
+  } catch (e) {
+    removeLoading();
+    addMessage(`<div class="err-msg">⚠️ Errore di rete: ${e.message}</div>`, 'assistant');
+  }
+
+  btn.disabled    = false;
+  btn.textContent = 'Analizza';
+}
+
+document.getElementById('url-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') analyze();
+});
+
+document.getElementById('secure').addEventListener('change', e => {
+  document.getElementById('security-level').disabled = !e.target.checked;
+  document.getElementById('security-level').style.visibility = e.target.checked ? 'visible' : 'hidden';
+});
+</script>
+</body>
+</html>

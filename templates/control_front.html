@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel= "stylesheet" type= "text/css" href= "{{ url_for('static',filename='att_style.css') }}">
+<title>IPI Demo — Attaccante</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<div id="attacker-panel">
+  <div class="attacker-header">
+    <div class="attacker-title">
+      <div class="atk-dot" id="atk-dot"></div>
+      <h2>ATTACKER VIEW — Dati Ricevuti</h2>
+    </div>
+    <div style="display:flex;align-items:center;gap:14px">
+      <div class="atk-count">
+        Richieste: <span class="count-val" id="count-val">0</span>
+      </div>
+      <button class="clear-btn" onclick="clearLog()">reset</button>
+    </div>
+  </div>
+
+  <div class="attacker-body" id="attacker-body">
+    <div class="atk-empty" id="atk-empty">
+      <div class="cursor">_</div>
+      <p>In ascolto su <strong style="color:#3A3A5C">localhost:9000/log</strong><br>
+         Nessun dato ricevuto.</p>
+      <p style="color:#252535;margin-top:4px">La GET arriverà quando il browser<br>renderizza il Markdown dell'assistente.</p>
+    </div>
+  </div>
+
+  <div class="attacker-status">
+    <div class="status-dot listening" id="status-dot"></div>
+    <span class="status-text" id="status-text">Endpoint attivo — polling ogni 600ms</span>
+  </div>
+</div>
+
+<script>
+
+let knownCount = 0;
+
+function renderEntry(entry, isNew) {
+  const div = document.createElement('div');
+  div.className = 'atk-entry' + (isNew ? ' new-entry' : '');
+
+  const header = document.createElement('div');
+  header.className = 'atk-entry-header';
+  header.innerHTML = `
+    <span class="atk-ts">${entry.timestamp}</span>
+    <span class="atk-badge">GET /log</span>`;
+  div.appendChild(header);
+
+  const fields = document.createElement('div');
+  fields.className = 'atk-fields';
+  for (const [k, v] of Object.entries(entry.params)) {
+    const row = document.createElement('div');
+    row.className = 'atk-field';
+    row.innerHTML = `
+      <span class="atk-field-key">${k}</span>
+      <span class="atk-field-val">${v}</span>`;
+    fields.appendChild(row);
+  }
+  div.appendChild(fields);
+
+  const req = document.createElement('div');
+  req.className = 'atk-req-line';
+  const qs = Object.entries(entry.params).map(([k,v]) => `${k}=${encodeURIComponent(v)}`).join('&');
+  req.textContent = `← ${entry.ip}  /log?${qs}`;
+  div.appendChild(req);
+
+  return div;
+}
+
+async function pollAttacker() {
+  try {
+    const res  = await fetch('/received');
+    const data = await res.json();
+
+    if (data.length === 0) return;
+
+    const empty = document.getElementById('atk-empty');
+    if (empty) empty.remove();
+
+    document.getElementById('count-val').textContent = data.length;
+    document.getElementById('atk-dot').classList.add('active');
+
+    if (data.length > knownCount) {
+      const body = document.getElementById('attacker-body');
+      for (let i = knownCount; i < data.length; i++) {
+        body.prepend(renderEntry(data[i], true));
+        setTimeout(() => {
+          body.firstChild && body.firstChild.classList &&
+            body.firstChild.classList.remove('new-entry');
+        }, 1000);
+      }
+      knownCount = data.length;
+    }
+  } catch (_) {}
+}
+
+async function clearLog() {
+  await fetch('/clear', { method: 'POST' });
+  document.getElementById('attacker-body').innerHTML =
+    `<div class="atk-empty" id="atk-empty">
+       <div class="cursor">_</div>
+       <p>Log svuotato — in attesa di nuovi dati.</p>
+     </div>`;
+  document.getElementById('count-val').textContent = '0';
+  document.getElementById('atk-dot').classList.remove('active');
+  knownCount = 0;
+}
+
+setInterval(pollAttacker, 1000);
+</script>
+</body>
+</html>
